@@ -1,0 +1,71 @@
+# Builds AFK Remote into an UNSIGNED .ipa on a free GitHub-hosted Mac.
+# You download the .ipa afterwards and let SideStore sign it with your free Apple ID.
+#
+# How to run it:
+#   1. Push this project to a GitHub repository (the whole folder, keeping this
+#      .github/workflows/build-ipa.yml path exactly).
+#   2. On GitHub open the "Actions" tab -> "Build unsigned IPA" -> "Run workflow".
+#   3. When it finishes (green check), open the run, scroll to "Artifacts",
+#      and download "AFK-Remote-unsigned-ipa". Inside is AfkRemoteIos.ipa.
+
+name: Build unsigned IPA
+
+# Lets you start it by hand from the Actions tab, and also on every push.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Use the latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: swift_space
+        run: xcodegen generate
+
+      - name: Build the app (no code signing)
+        working-directory: swift_space
+        run: |
+          xcodebuild \
+            -project AfkRemoteIos.xcodeproj \
+            -scheme AfkRemoteIos \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Package the .app into an unsigned .ipa
+        working-directory: swift_space
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/AfkRemoteIos.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Build output not found at $APP_PATH"; exit 1
+          fi
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r AfkRemoteIos.ipa Payload >/dev/null
+          echo "Created AfkRemoteIos.ipa"
+          ls -lh AfkRemoteIos.ipa
+
+      - name: Upload the .ipa so you can download it
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFK-Remote-unsigned-ipa
+          path: swift_space/AfkRemoteIos.ipa
+          if-no-files-found: error
