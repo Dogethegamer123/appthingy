@@ -1,0 +1,181 @@
+# =============================================================================
+# AFK Remote — build the IPA AND auto-update the SideStore source, in one go.
+# Replaces your old build-ipa.yml. After one-time setup, you just change
+# APP_VERSION below, push, and SideStore shows "Update" on its own.
+# =============================================================================
+#
+# ONE-TIME SETUP (do these once, then never again):
+#
+#  1) Make a token that can edit your gist:
+#       GitHub -> your avatar (top right) -> Settings
+#       -> Developer settings (bottom of the left menu)
+#       -> Personal access tokens -> Tokens (classic)
+#       -> Generate new token (classic)
+#       -> Note: "afk gist"   Expiration: No expiration
+#       -> tick ONLY the box labelled  gist
+#       -> Generate token -> COPY it (you only see it once).
+#
+#  2) Save it + your gist id as repo secrets:
+#       appthingy repo -> Settings -> Secrets and variables -> Actions
+#       -> New repository secret:
+#            Name:  GIST_TOKEN    Secret: (paste the token from step 1)
+#       -> New repository secret:
+#            Name:  GIST_ID       Secret: 5cf9f2ea76cc5ed7ee69638ecd0ccdaa
+#
+#  3) That's it. From now on, to release a new version:
+#       change APP_VERSION below -> commit/push -> done.
+# =============================================================================
+
+name: Build and publish AFK Remote
+
+env:
+  # ====>  CHANGE THIS NUMBER EACH TIME YOU WANT A NEW VERSION  <====
+  APP_VERSION: "1.1.0"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Use the latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: swift_space
+        run: xcodegen generate
+
+      - name: Build the app (no code signing)
+        working-directory: swift_space
+        run: |
+          xcodebuild \
+            -project AfkRemoteIos.xcodeproj \
+            -scheme AfkRemoteIos \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Stamp the version into the app
+        working-directory: swift_space
+        run: |
+          PLIST="build/Build/Products/Release-iphoneos/AfkRemoteIos.app/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_VERSION" "$PLIST" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $APP_VERSION" "$PLIST"
+          echo "Stamped version $APP_VERSION"
+
+      - name: Package the .app into an unsigned .ipa
+        working-directory: swift_space
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/AfkRemoteIos.app"
+          if [ ! -d "$APP_PATH" ]; then echo "Build output not found"; exit 1; fi
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          rm -rf "Payload/AfkRemoteIos.app/_CodeSignature"
+          rm -f  "Payload/AfkRemoteIos.app/embedded.mobileprovision"
+          find Payload/AfkRemoteIos.app -name "_CodeSignature" -type d -exec rm -rf {} + 2>/dev/null || true
+          find Payload/AfkRemoteIos.app -name "embedded.mobileprovision" -delete 2>/dev/null || true
+          zip -r AfkRemoteIos.ipa Payload >/dev/null
+          ls -lh AfkRemoteIos.ipa
+
+      - name: Upload the .ipa for the next job
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFK-Remote-unsigned-ipa
+          path: swift_space/AfkRemoteIos.ipa
+          if-no-files-found: error
+
+  publish_and_update_source:
+    needs: build
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - name: Download the built IPA
+        uses: actions/download-artifact@v4
+        with:
+          path: ipa_download
+
+      - name: Find the IPA and read its real version
+        id: info
+        run: |
+          IPA=$(find ipa_download -name '*.ipa' | head -n1)
+          cp "$IPA" AfkRemoteIos.ipa
+          WORK=$(mktemp -d); unzip -q AfkRemoteIos.ipa -d "$WORK"
+          PLIST=$(find "$WORK/Payload" -maxdepth 2 -name Info.plist | head -n1)
+          VER=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")
+          SIZE=$(stat -f%z AfkRemoteIos.ipa)
+          echo "version=$VER"  >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE"    >> "$GITHUB_OUTPUT"
+          echo "Version is $VER, size $SIZE bytes"
+
+      - name: Create / update the GitHub Release with the IPA
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.info.outputs.version }}
+          name: AFK Remote ${{ steps.info.outputs.version }}
+          files: AfkRemoteIos.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rewrite the gist so SideStore sees the update
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID:    ${{ secrets.GIST_ID }}
+          VER:        ${{ steps.info.outputs.version }}
+          SIZE:       ${{ steps.info.outputs.size }}
+        run: |
+          OWNER='${{ github.repository_owner }}'
+          REPO='${{ github.event.repository.name }}'
+          ICON="https://cdn.prod.website-files.com/62876589ec366575fa309b1e/6afcadfb21c503436814aa3e_postgresql-cve-2026-6460-november-2026-security-release.png"
+          DLL="https://github.com/$OWNER/$REPO/releases/download/v$VER/AfkRemoteIos.ipa"
+          TODAY=$(date +%Y-%m-%d)
+
+          cat > source.json <<EOF
+          {
+            "name": "AFK Remote",
+            "identifier": "com.dogethegamer.afkremote.source",
+            "subtitle": "Control your Roblox macros from your phone",
+            "iconURL": "$ICON",
+            "apps": [
+              {
+                "name": "AFK Remote",
+                "bundleIdentifier": "com.abacusai.afkremoteios.t1793676077",
+                "developerName": "Dogethegamer123",
+                "subtitle": "Remote control for your Roblox AFK macros",
+                "version": "$VER",
+                "versionDate": "$TODAY",
+                "versionDescription": "Update $VER",
+                "downloadURL": "$DLL",
+                "localizedDescription": "Start, stop and schedule your Roblox macros from your phone over Discord. Includes macro categories, live feed and screenshots.",
+                "iconURL": "$ICON",
+                "tintColor": "5865F2",
+                "size": $SIZE
+              }
+            ],
+            "news": []
+          }
+          EOF
+
+          BODY=$(jq -n --arg c "$(cat source.json)" \
+            '{files: {"afkremote-source.json": {content: $c}}}')
+          curl -sS -X PATCH \
+            -H "Authorization: token $GIST_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/gists/$GIST_ID" \
+            -d "$BODY" -o /dev/null -w 'Gist update HTTP %{http_code}\n'
