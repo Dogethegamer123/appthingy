@@ -30,7 +30,7 @@ name: Build and publish AFK Remote
 
 env:
   # ====>  CHANGE THIS NUMBER EACH TIME YOU WANT A NEW VERSION  <====
-  APP_VERSION: "1.1.0"
+  APP_VERSION: "1.1.1"
 
 on:
   workflow_dispatch:
@@ -178,4 +178,11 @@ jobs:
             -H "Authorization: token $GIST_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/gists/$GIST_ID" \
-            -d "$BODY" -o /dev/null -w 'Gist update HTTP %{http_code}\n'
+            -d "$BODY" -o gist_resp.txt -w '%{http_code}' > gist_code.txt
+          CODE=$(cat gist_code.txt)
+          echo "Gist update HTTP $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "::error::Gist update failed (HTTP $CODE). Check the GIST_TOKEN and GIST_ID repo secrets."
+            cat gist_resp.txt
+            exit 1
+          fi
