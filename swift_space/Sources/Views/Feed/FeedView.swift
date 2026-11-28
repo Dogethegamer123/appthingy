@@ -6,6 +6,7 @@ struct FeedView: View {
     @Environment(CredentialStore.self) private var credentials
     @Environment(\.modelContext) private var context
     @Query private var settings: [AppSettings]
+    @Query private var macros: [Macro]
     
     @State private var searchText = ""
     @State private var filter: FeedFilter = .all
@@ -23,7 +24,7 @@ struct FeedView: View {
     }
     
     private var filteredMessages: [DiscordMessage] {
-        var msgs = feedStore.messages
+        var msgs = feedStore.displayMessages
         
         if !searchText.isEmpty {
             msgs = msgs.filter {
@@ -110,7 +111,7 @@ struct FeedView: View {
                     ScrollView {
                         LazyVStack(spacing: Theme.spacing8) {
                             ForEach(filteredMessages) { msg in
-                                MessageRow(message: msg) { url in
+                                MessageRow(message: msg, commandMacros: macros) { url in
                                     viewerImageURL = url
                                     showImageViewer = true
                                 }

@@ -4,17 +4,29 @@ import PhotosUI
 
 struct MacroEditorView: View {
     let macro: Macro?
+    var defaultCategoryKey: String? = nil
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \MacroCategoryModel.sortOrder) private var categories: [MacroCategoryModel]
     
     @State private var name: String = ""
     @State private var command: String = ""
     @State private var desc: String = ""
-    @State private var category: MacroCategory = .utility
+    @State private var categoryKey: String = "utility"
     @State private var subcategory: MacroSubcategory = .utility
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var imageData: Data?
+    @State private var iconSymbol: String = "bolt.fill"
     @State private var commandError: String?
+    
+    static let symbolChoices: [String] = [
+        "bolt.fill", "camera.fill", "chart.bar.fill", "stop.fill", "play.fill",
+        "arrow.clockwise", "questionmark.circle.fill", "pawprint.fill", "sparkles",
+        "gift.fill", "cube.box.fill", "shippingbox.fill", "crown.fill", "flame.fill",
+        "star.fill", "wrench.and.screwdriver.fill", "cursorarrow.click", "timer",
+        "wand.and.stars", "trophy.fill", "hare.fill", "gamecontroller.fill",
+        "moon.fill", "snowflake"
+    ]
     
     private var isEditing: Bool { macro != nil }
     private let commandRegex = /^[A-Za-z0-9_]+$/
@@ -37,10 +49,41 @@ struct MacroEditorView: View {
                                 .frame(width: 64, height: 64)
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                         } else {
-                            MacroPlaceholderTile(category: category.rawValue, size: 64)
+                            MacroPlaceholderTile(category: categoryKey, size: 64, symbol: iconSymbol)
                         }
-                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                            Text(imageData == nil ? "Add Photo" : "Change Photo")
+                        VStack(alignment: .leading, spacing: 6) {
+                            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                                Text(imageData == nil ? "Add Photo" : "Change Photo")
+                            }
+                            if imageData != nil {
+                                Button("Remove Photo", role: .destructive) { imageData = nil }
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                }
+                
+                if imageData == nil {
+                    Section("Icon") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(Self.symbolChoices, id: \.self) { sym in
+                                    Button {
+                                        iconSymbol = sym
+                                    } label: {
+                                        Image(systemName: sym)
+                                            .font(.system(size: 20))
+                                            .frame(width: 44, height: 44)
+                                            .foregroundStyle(iconSymbol == sym ? .white : Theme.primaryText)
+                                            .background(
+                                                iconSymbol == sym ? Color(hex: "FF0000") : Theme.elevated,
+                                                in: RoundedRectangle(cornerRadius: 10)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.vertical, 4)
                         }
                     }
                 }
@@ -69,9 +112,9 @@ struct MacroEditorView: View {
                 }
                 
                 Section("Classification") {
-                    Picker("Category", selection: $category) {
-                        ForEach(MacroCategory.allCases, id: \.rawValue) { cat in
-                            Text(cat.displayName).tag(cat)
+                    Picker("Category", selection: $categoryKey) {
+                        ForEach(categories, id: \.key) { cat in
+                            Text(cat.name).tag(cat.key)
                         }
                     }
                     
@@ -112,13 +155,23 @@ struct MacroEditorView: View {
     }
     
     private func loadMacro() {
-        guard let m = macro else { return }
+        guard let m = macro else {
+            // New macro: default to the category the user is currently viewing,
+            // falling back to the first category or "utility".
+            categoryKey = defaultCategoryKey ?? categories.first?.key ?? "utility"
+            return
+        }
         name = m.name
         command = m.command
         desc = m.macroDescription
-        category = MacroCategory(rawValue: m.category) ?? .utility
+        categoryKey = m.category
         subcategory = MacroSubcategory(rawValue: m.subcategory) ?? .utility
         imageData = m.imageData
+        iconSymbol = m.iconSymbol
+    }
+    
+    private var resolvedGame: String {
+        categories.first(where: { $0.key == categoryKey })?.game ?? "Utility"
     }
     
     private func validateCommand() {
@@ -138,19 +191,21 @@ struct MacroEditorView: View {
             m.name = name.trimmingCharacters(in: .whitespaces)
             m.command = trimmedCmd
             m.macroDescription = desc
-            m.category = category.rawValue
+            m.category = categoryKey
             m.subcategory = subcategory.rawValue
-            m.game = category.game
+            m.game = resolvedGame
             m.imageData = imageData
+            m.iconSymbol = iconSymbol
         } else {
             let newMacro = Macro(
                 name: name.trimmingCharacters(in: .whitespaces),
                 command: trimmedCmd,
                 macroDescription: desc,
-                category: category.rawValue,
+                category: categoryKey,
                 subcategory: subcategory.rawValue,
-                game: category.game,
+                game: resolvedGame,
                 imageData: imageData,
+                iconSymbol: iconSymbol,
                 isCustom: true
             )
             context.insert(newMacro)

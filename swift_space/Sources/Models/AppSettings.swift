@@ -8,7 +8,7 @@ final class AppSettings {
     var hapticsEnabled: Bool
     var didSeed: Bool
     
-    init(refreshInterval: Int = 15, accentHex: String = "FF0000", hapticsEnabled: Bool = true, didSeed: Bool = false) {
+    init(refreshInterval: Int = 10, accentHex: String = "FF0000", hapticsEnabled: Bool = true, didSeed: Bool = false) {
         self.refreshInterval = refreshInterval
         self.accentHex = accentHex
         self.hapticsEnabled = hapticsEnabled

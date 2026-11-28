@@ -30,7 +30,8 @@ struct DiscordMessage: Codable, Identifiable, Equatable {
     
     var avatarURL: URL? {
         guard let av = author.avatar else { return nil }
-        return URL(string: "https://i.etsystatic.com/61071113/r/il/83c2bf/8060437828/il_1080xN.8060437828_wbme.jpg")
+        let ext = av.hasPrefix("a_") ? "gif" : "png"
+        return URL(string: "https://cdn.discordapp.com/avatars/\(author.id)/\(av).\(ext)?size=64")
     }
     
     var isBot: Bool { author.bot == true }
@@ -38,6 +39,32 @@ struct DiscordMessage: Codable, Identifiable, Equatable {
     
     var isCommand: Bool { content.hasPrefix("[App]") }
     
+    /// "[App] !send_screenshot" -> "send_screenshot"
+    var appCommandSlug: String? {
+        guard isCommand else { return nil }
+        var s = content
+        if let r = s.range(of: "[App]") { s.removeSubrange(r) }
+        s = s.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("!") { s.removeFirst() }
+        s = s.trimmingCharacters(in: .whitespaces)
+        return s.isEmpty ? nil : s
+    }
+    
+    /// True for the PC's machine-readable active-macro status lines, e.g.
+    /// "[Status] active=ttd_coins" or "[Status] active=none". These drive which
+    /// macro the app shows as running and are hidden from the visible feed.
+    var isStatusMarker: Bool { content.contains("[Status] active=") }
+
+    /// The command from a "[Status] active=<cmd>" line, lowercased, or nil.
+    /// Returns "none" when the PC reported that nothing is running.
+    var activeStatusCommand: String? {
+        guard let r = content.range(of: "[Status] active=") else { return nil }
+        let rest = content[r.upperBound...]
+        let token = rest.prefix { !$0.isWhitespace }
+        let s = String(token).trimmingCharacters(in: .whitespaces).lowercased()
+        return s.isEmpty ? nil : s
+    }
+
     var hasImage: Bool {
         attachments.contains(where: { ($0.contentType ?? "").hasPrefix("image/") }) ||
         embeds.contains(where: { $0.image != nil })

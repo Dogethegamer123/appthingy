@@ -5,17 +5,24 @@ struct MacrosView: View {
     @Query private var macros: [Macro]
     @Query private var activeStates: [ActiveMacroState]
     @Query private var settings: [AppSettings]
-    @State private var selectedCategory: MacroCategory = .psxClassic
+    @Query(sort: \MacroCategoryModel.sortOrder) private var categories: [MacroCategoryModel]
+    @State private var selectedKey: String?
     @State private var searchText = ""
     @State private var showEditor = false
     @State private var editingMacro: Macro?
+    @State private var showCategoryManager = false
     @Environment(\.modelContext) private var context
     
     private var accent: Color { Color(hex: settings.first?.accentHex ?? Theme.defaultAccent) }
     private var activeCommand: String? { activeStates.first?.command }
     
+    private var currentKey: String? {
+        if let k = selectedKey, categories.contains(where: { $0.key == k }) { return k }
+        return categories.first?.key
+    }
+    
     private var filteredMacros: [Macro] {
-        macros.filter { $0.category == selectedCategory.rawValue }
+        macros.filter { $0.category == currentKey }
               .filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) || $0.command.localizedCaseInsensitiveContains(searchText) }
     }
     
@@ -37,22 +44,35 @@ struct MacrosView: View {
                 // Category chips
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Theme.spacing8) {
-                        ForEach(MacroCategory.allCases, id: \.rawValue) { cat in
+                        ForEach(categories, id: \.id) { cat in
                             Button {
-                                selectedCategory = cat
+                                selectedKey = cat.key
                             } label: {
-                                Label(cat.displayName, systemImage: cat.icon)
+                                Label(cat.name, systemImage: cat.iconSymbol)
                                     .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(selectedCategory == cat ? .white : Theme.primaryText)
+                                    .foregroundStyle(currentKey == cat.key ? .white : Theme.primaryText)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 8)
                                     .background(
-                                        selectedCategory == cat ? accent : Theme.elevated,
+                                        currentKey == cat.key ? accent : Theme.elevated,
                                         in: Capsule()
                                     )
                             }
                             .buttonStyle(.plain)
                         }
+                        
+                        Button {
+                            showCategoryManager = true
+                        } label: {
+                            Label("Categories", systemImage: "slider.horizontal.3")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Theme.secondaryText)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(Theme.elevated, in: Capsule())
+                                .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, Theme.spacing16)
                     .padding(.vertical, Theme.spacing12)
@@ -99,19 +119,31 @@ struct MacrosView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        editingMacro = nil
-                        showEditor = true
+                    Menu {
+                        Button {
+                            editingMacro = nil
+                            showEditor = true
+                        } label: {
+                            Label("New Macro", systemImage: "bolt.badge.plus")
+                        }
+                        Button {
+                            showCategoryManager = true
+                        } label: {
+                            Label("Manage Categories", systemImage: "square.grid.2x2")
+                        }
                     } label: {
                         Image(systemName: "plus")
                     }
                 }
             }
             .sheet(isPresented: $showEditor) {
-                MacroEditorView(macro: nil)
+                MacroEditorView(macro: nil, defaultCategoryKey: currentKey)
             }
             .sheet(item: $editingMacro) { macro in
                 MacroEditorView(macro: macro)
+            }
+            .sheet(isPresented: $showCategoryManager) {
+                CategoryManagerView()
             }
         }
     }
@@ -164,7 +196,7 @@ struct MacroRow: View {
                     .frame(width: 52, height: 52)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             } else {
-                MacroPlaceholderTile(category: macro.category, size: 52)
+                MacroPlaceholderTile(category: macro.category, size: 52, symbol: macro.iconSymbol)
             }
             
             VStack(alignment: .leading, spacing: 2) {

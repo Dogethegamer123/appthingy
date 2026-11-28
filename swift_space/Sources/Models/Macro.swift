@@ -11,10 +11,11 @@ final class Macro {
     var subcategory: String
     var game: String
     @Attribute(.externalStorage) var imageData: Data?
+    var iconSymbol: String = "bolt.fill"
     var dateCreated: Date
     var isCustom: Bool
     
-    init(id: UUID = UUID(), name: String, command: String, macroDescription: String, category: String, subcategory: String, game: String, imageData: Data? = nil, dateCreated: Date = .now, isCustom: Bool = false) {
+    init(id: UUID = UUID(), name: String, command: String, macroDescription: String, category: String, subcategory: String, game: String, imageData: Data? = nil, iconSymbol: String = "bolt.fill", dateCreated: Date = .now, isCustom: Bool = false) {
         self.id = id
         self.name = name
         self.command = command
@@ -23,6 +24,7 @@ final class Macro {
         self.subcategory = subcategory
         self.game = game
         self.imageData = imageData
+        self.iconSymbol = iconSymbol
         self.dateCreated = dateCreated
         self.isCustom = isCustom
     }

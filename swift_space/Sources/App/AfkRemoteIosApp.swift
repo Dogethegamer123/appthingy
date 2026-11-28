@@ -9,6 +9,7 @@ struct AfkRemoteIosApp: App {
         }
         .modelContainer(for: [
             Macro.self,
+            MacroCategoryModel.self,
             Schedule.self,
             ActiveMacroState.self,
             AppSettings.self,

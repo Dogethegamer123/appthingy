@@ -302,16 +302,16 @@ struct HomeView: View {
                 .foregroundStyle(accent)
             }
             
-            if feedStore.messages.isEmpty && !feedStore.isLoading {
+            if feedStore.displayMessages.isEmpty && !feedStore.isLoading {
                 Text("No activity yet")
                     .font(.subheadline)
                     .foregroundStyle(Theme.secondaryText)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.spacing16)
             } else {
-                let recentMsgs = Array(feedStore.messages.prefix(15).reversed())
+                let recentMsgs = Array(feedStore.displayMessages.prefix(15).reversed())
                 ForEach(recentMsgs) { msg in
-                    MessageRow(message: msg, compact: true)
+                    MessageRow(message: msg, compact: true, commandMacros: allMacros)
                 }
             }
         }

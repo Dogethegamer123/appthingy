@@ -1,21 +1,32 @@
 import SwiftUI
+import SwiftData
 
 struct MacroPlaceholderTile: View {
     let category: String
     var size: CGFloat = 52
-    
-    private var cat: MacroCategory {
-        MacroCategory(rawValue: category) ?? .utility
+    var symbol: String? = nil
+    @Query private var categories: [MacroCategoryModel]
+
+    private var resolved: MacroCategoryModel? {
+        categories.first { $0.key == category }
     }
-    
+
+    private var gradientStart: Color {
+        Color(hex: resolved?.colorHex ?? "262626")
+    }
+
+    private var icon: String {
+        symbol ?? resolved?.iconSymbol ?? "bolt.fill"
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [cat.gradientStart, Theme.surface],
+                colors: [gradientStart, Theme.surface],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: cat.icon)
+            Image(systemName: icon)
                 .font(.system(size: size * 0.4))
                 .foregroundStyle(Theme.secondaryText.opacity(0.6))
         }

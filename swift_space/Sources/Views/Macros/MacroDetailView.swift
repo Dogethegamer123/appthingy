@@ -10,6 +10,11 @@ struct MacroDetailView: View {
     @Query private var activeStates: [ActiveMacroState]
     @Query private var settings: [AppSettings]
     @Query private var allMacros: [Macro]
+    @Query private var categories: [MacroCategoryModel]
+    
+    private var categoryName: String {
+        categories.first(where: { $0.key == macro.category })?.name ?? macro.category
+    }
     
     @State private var isSending = false
     @State private var toastMessage: String?
@@ -83,7 +88,7 @@ struct MacroDetailView: View {
                     VStack(spacing: 0) {
                         detailRow("Game", macro.game)
                         Divider().background(Theme.hairline)
-                        detailRow("Category", MacroCategory(rawValue: macro.category)?.displayName ?? macro.category)
+                        detailRow("Category", categoryName)
                         Divider().background(Theme.hairline)
                         detailRow("Subcategory", MacroSubcategory(rawValue: macro.subcategory)?.displayName ?? macro.subcategory)
                         Divider().background(Theme.hairline)

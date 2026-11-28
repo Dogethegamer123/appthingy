@@ -3,6 +3,11 @@ import Foundation
 
 enum SeedService {
     static func seedIfNeeded(context: ModelContext) {
+        // Categories are seeded independently of macros so that users upgrading
+        // from an older version (which had no category model) still get the
+        // built-in categories back-filled.
+        seedCategoriesIfNeeded(context: context)
+
         let descriptor = FetchDescriptor<AppSettings>()
         let settings: AppSettings
         if let existing = try? context.fetch(descriptor).first {
@@ -74,6 +79,20 @@ enum SeedService {
         try? context.save()
     }
     
+    static func seedCategoriesIfNeeded(context: ModelContext) {
+        let descriptor = FetchDescriptor<MacroCategoryModel>()
+        let existing = (try? context.fetch(descriptor)) ?? []
+        guard existing.isEmpty else { return }
+        for seed in MacroCategoryModel.builtInSeeds {
+            context.insert(MacroCategoryModel(
+                key: seed.key, name: seed.name, iconSymbol: seed.iconSymbol,
+                colorHex: seed.colorHex, game: seed.game,
+                sortOrder: seed.sortOrder, isBuiltIn: true
+            ))
+        }
+        try? context.save()
+    }
+
     private static func formatName(_ command: String) -> String {
         command.split(separator: "_").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }

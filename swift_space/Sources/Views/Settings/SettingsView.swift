@@ -115,6 +115,7 @@ struct SettingsView: View {
                             try? context.save()
                         }
                     )) {
+                        Text("5s").tag(5)
                         Text("10s").tag(10)
                         Text("15s").tag(15)
                         Text("30s").tag(30)

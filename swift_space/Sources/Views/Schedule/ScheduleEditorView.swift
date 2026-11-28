@@ -190,6 +190,7 @@ struct ScheduleEditorView: View {
 struct MacroPickerList: View {
     @Binding var selectedId: UUID?
     @Query private var macros: [Macro]
+    @Query(sort: \MacroCategoryModel.sortOrder) private var categories: [MacroCategoryModel]
     @State private var searchText = ""
     @Environment(\.dismiss) private var dismiss
     
@@ -200,11 +201,17 @@ struct MacroPickerList: View {
     
     private var grouped: [(String, [Macro])] {
         var result: [(String, [Macro])] = []
-        for cat in MacroCategory.allCases {
-            let items = filtered.filter { $0.category == cat.rawValue }
+        for cat in categories {
+            let items = filtered.filter { $0.category == cat.key }
             if !items.isEmpty {
-                result.append((cat.displayName, items))
+                result.append((cat.name, items))
             }
+        }
+        // Any macros whose category was deleted still show under "Other".
+        let knownKeys = Set(categories.map(\.key))
+        let orphans = filtered.filter { !knownKeys.contains($0.category) }
+        if !orphans.isEmpty {
+            result.append(("Other", orphans))
         }
         return result
     }

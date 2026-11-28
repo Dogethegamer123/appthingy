@@ -40,12 +40,17 @@ struct MainTabView: View {
         .tint(accent)
         .onAppear {
             feedStore.loadCache(context: context)
-            Task { await feedStore.refresh(credentials: credentials, context: context) }
+            feedStore.startPolling(credentials: credentials, context: context, interval: appSettings?.refreshInterval ?? 10)
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
-                Task { await feedStore.refresh(credentials: credentials, context: context) }
+                feedStore.startPolling(credentials: credentials, context: context, interval: appSettings?.refreshInterval ?? 10)
+            } else {
+                feedStore.stopPolling()
             }
+        }
+        .onChange(of: appSettings?.refreshInterval) { _, newVal in
+            feedStore.startPolling(credentials: credentials, context: context, interval: newVal ?? 10)
         }
     }
 }

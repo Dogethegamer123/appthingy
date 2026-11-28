@@ -3,23 +3,13 @@ import SwiftUI
 struct MessageRow: View {
     let message: DiscordMessage
     var compact: Bool = false
+    var commandMacros: [Macro] = []
     var onImageTap: ((URL) -> Void)? = nil
     
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             if !compact {
-                AsyncImage(url: message.avatarURL) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().aspectRatio(contentMode: .fill)
-                    default:
-                        Image(systemName: "person.circle.fill")
-                            .resizable()
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                }
-                .frame(width: 36, height: 36)
-                .clipShape(Circle())
+                DiscordAvatar(message: message, size: 36)
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -55,7 +45,7 @@ struct MessageRow: View {
                 // Content
                 if !message.content.isEmpty {
                     if message.isCommand {
-                        CommandPill(content: message.content)
+                        CommandPill(slug: message.appCommandSlug, macro: matchedMacro)
                     } else {
                         Text(message.content)
                             .font(.subheadline)
@@ -94,6 +84,11 @@ struct MessageRow: View {
         .padding(.vertical, 4)
     }
     
+    private var matchedMacro: Macro? {
+        guard let slug = message.appCommandSlug else { return nil }
+        return commandMacros.first { $0.command.caseInsensitiveCompare(slug) == .orderedSame }
+    }
+    
     private func relativeTime(_ date: Date) -> String {
         let diff = Date.now.timeIntervalSince(date)
         if diff < 60 { return "now" }
@@ -104,18 +99,72 @@ struct MessageRow: View {
 }
 
 struct CommandPill: View {
-    let content: String
+    var slug: String?
+    var macro: Macro? = nil
+    
+    private var title: String {
+        if let m = macro { return m.name }
+        guard let s = slug else { return "Command" }
+        return s.replacingOccurrences(of: "_", with: " ")
+            .split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+    
+    private var symbol: String {
+        if let m = macro { return m.iconSymbol }
+        return CommandPill.defaultSymbol(for: slug)
+    }
+    
+    static func defaultSymbol(for slug: String?) -> String {
+        switch (slug ?? "").lowercased() {
+        case "send_screenshot": return "camera.fill"
+        case "stats": return "chart.bar.fill"
+        case "stop": return "stop.fill"
+        case "reconnect", "check_disconnect": return "arrow.clockwise"
+        case "help": return "questionmark.circle.fill"
+        case "gifts": return "gift.fill"
+        case "rankup": return "crown.fill"
+        case let s where s.contains("candy"): return "sparkles"
+        case let s where s.contains("egg") || s.contains("halloween"): return "pawprint.fill"
+        case let s where s.contains("chest"): return "cube.box.fill"
+        case let s where s.contains("raid"): return "flame.fill"
+        case let s where s.contains("autoclicker"): return "cursorarrow.click"
+        default: return "bolt.fill"
+        }
+    }
+    
     var body: some View {
-        Text(content)
-            .font(.caption.monospaced())
-            .foregroundStyle(Color(hex: "FF0000"))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(hex: "FF0000").opacity(0.5), lineWidth: 1)
-                    .background(Color(hex: "FF0000").opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-            )
+        HStack(spacing: 8) {
+            Group {
+                if let data = macro?.imageData, let ui = UIImage(data: data) {
+                    Image(uiImage: ui).resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    Image(systemName: symbol)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(width: 24, height: 24)
+            .background(Color(hex: "FF0000"), in: RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(Theme.primaryText)
+                Text("Sent from app")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(hex: "FF0000").opacity(0.4), lineWidth: 1)
+                .background(Color(hex: "FF0000").opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        )
     }
 }
 
